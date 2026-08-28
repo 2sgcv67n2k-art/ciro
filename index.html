@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mağaza Ciro Takip</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#182A3A; --ink-light:#24374A; --bg:#F1F3F5; --card:#FFFFFF;
+    --amber:#E3A542; --amber-light:#FBE8C4; --green:#3FA672; --green-light:#D7F0E3;
+    --red:#D6584A; --red-light:#FBDCD7; --text:#1C2A36; --text-muted:#6C7B89; --border:#E3E6EA;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;}
+  .app{max-width:960px;margin:0 auto;padding:16px 14px 60px;}
+
+  header.top{background:var(--ink);color:#fff;border-radius:16px;padding:20px 20px 18px;margin-bottom:14px;position:relative;overflow:hidden;}
+  header.top::after{content:"";position:absolute;right:-40px;top:-40px;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,var(--amber) 0%,transparent 70%);opacity:.35;}
+  header.top h1{margin:0 0 4px;font-size:20px;font-weight:800;letter-spacing:-0.2px;}
+  header.top p{margin:0;font-size:12.5px;color:#B9C4CE;line-height:1.5;max-width:560px;position:relative;}
+  .header-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;position:relative;}
+  .who-badge{font-size:11px;font-weight:700;color:#fff;background:rgba(255,255,255,.12);padding:5px 10px;border-radius:20px;margin-top:8px;display:inline-flex;align-items:center;gap:5px;}
+  .logout-btn{background:rgba(255,255,255,.14);color:#fff;border:none;border-radius:9px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;}
+
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px;}
+  .card h2{font-size:14px;font-weight:800;margin:0 0 12px;display:flex;align-items:center;gap:6px;}
+  .card h2 .dot{width:7px;height:7px;border-radius:50%;background:var(--amber);display:inline-block;}
+
+  .field-row{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;}
+  .field{flex:1;min-width:130px;display:flex;flex-direction:column;gap:5px;}
+  label{font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;}
+  select,input{border:1.5px solid var(--border);border-radius:9px;padding:10px 10px;font-size:14px;font-family:inherit;color:var(--text);background:#fff;width:100%;}
+  select:focus,input:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber);}
+
+  .btn{border:none;border-radius:10px;padding:12px 16px;font-size:14px;font-weight:800;cursor:pointer;width:100%;}
+  .btn-primary{background:var(--ink);color:#fff;}
+  .btn-primary:disabled{opacity:.55;cursor:default;}
+  .btn-ghost{background:var(--bg);color:var(--text);border:1.5px solid var(--border);}
+  .btn-amber{background:var(--amber);color:#3E2A05;}
+  .btn-row{display:flex;gap:8px;}
+  .btn-row .btn{width:auto;flex:1;}
+
+  .status-msg{font-size:12px;margin-top:8px;font-weight:600;min-height:16px;}
+  .status-ok{color:var(--green);} .status-err{color:var(--red);}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.3px;color:var(--text-muted);padding:6px 7px;border-bottom:2px solid var(--border);white-space:nowrap;}
+  td{padding:8px 7px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  .row-total td{font-weight:800;background:var(--bg);}
+  .num{text-align:right;font-variant-numeric:tabular-nums;}
+  .store-cell{font-weight:700;}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -16px;padding:0 16px;}
+  .edit-link{border:none;background:none;color:var(--ink);font-weight:700;font-size:11px;text-decoration:underline;cursor:pointer;padding:0;}
+  .empty-flag{color:var(--text-muted);font-style:italic;font-weight:500;}
+
+  .summary-cards{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+  .stat{flex:1;min-width:100px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;}
+  .stat .k{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;}
+  .stat .v{font-size:17px;font-weight:800;margin-top:3px;color:var(--ink);}
+
+  .tabs{display:flex;gap:6px;background:var(--card);padding:5px;border-radius:12px;border:1px solid var(--border);margin-bottom:14px;}
+  .tab-btn{flex:1;border:none;background:transparent;padding:10px 6px;font-size:12.5px;font-weight:700;color:var(--text-muted);border-radius:8px;cursor:pointer;}
+  .tab-btn.active{background:var(--ink);color:#fff;}
+
+  .loading{text-align:center;padding:24px;color:var(--text-muted);font-size:13px;}
+  .filter-row{display:flex;gap:8px;margin-bottom:2px;}
+  .filter-row .field{min-width:0;}
+
+  .grow-up{color:var(--green);font-weight:800;} .grow-down{color:var(--red);font-weight:800;} .grow-flat{color:var(--text-muted);font-weight:700;}
+  .matrix-store{position:sticky;left:0;background:var(--card);font-weight:700;z-index:1;}
+  .matrix-total{background:var(--bg);font-weight:800;}
+
+  /* login */
+  .login-wrap{display:flex;flex-direction:column;gap:12px;}
+  .login-choice{background:var(--card);border:1.5px solid var(--border);border-radius:14px;padding:18px;text-align:left;cursor:pointer;display:flex;align-items:center;gap:14px;}
+  .login-choice:active{border-color:var(--amber);}
+  .login-choice .ico{width:42px;height:42px;border-radius:11px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;}
+  .login-choice .txt h3{margin:0 0 2px;font-size:14.5px;font-weight:800;}
+  .login-choice .txt p{margin:0;font-size:12px;color:var(--text-muted);}
+  .back-link{border:none;background:none;color:var(--text-muted);font-weight:700;font-size:12.5px;cursor:pointer;padding:6px 0;margin-bottom:6px;}
+  .hint{font-size:11px;color:var(--text-muted);margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script>
+/* ================= CONFIG ================= */
+const STORE_PASSWORDS = {
+  "Köprübaşı":"6875",
+  "Cihangir":"2406",
+  "Kalenderhane":"6648",
+  "Kahraman":"7107",
+  "Musalla":"5219",
+  "Şemş":"10243",
+  "Nakipoğlu":"10318",
+  "Hacıhasan":"1563"
+};
+const STORES = Object.keys(STORE_PASSWORDS);
+const ADMIN_PASSWORD = "190542";
+const MONTH_NAMES = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+const FIELD_DEFS = [
+  {key:'ciro', label:'Ciro (₺)', kind:'money'},
+  {key:'musteri', label:'Müşteri Sayısı', kind:'int'},
+  {key:'ortCiro', label:'Ortalama Ciro (₺)', kind:'money'},
+  {key:'ortMusteri', label:'Ortalama Müşteri Sayısı', kind:'money'},
+  {key:'madenSuyu', label:'Maden Suyu (adet)', kind:'int'},
+  {key:'gofret', label:'Gofret (adet)', kind:'int'}
+];
+
+let session = null; // {type:'store', store:'X'} | {type:'admin'}
+
+/* ================= HELPERS ================= */
+function todayISO(){ const d=new Date(); const tz=d.getTimezoneOffset()*60000; return new Date(d-tz).toISOString().slice(0,10); }
+function fmt(n){ n = n||0; return (Math.round(n*100)/100).toLocaleString('tr-TR'); }
+function ymOf(d){ return d.slice(0,7); }
+function dayOf(d){ return d.slice(8,10); }
+function prevYm(year, monthNum){ let y=+year, m=+monthNum-1; if(m<1){m=12;y--;} return `${y}-${String(m).padStart(2,'0')}`; }
+
+async function getMonthRecord(store, ym){
+  try{
+    const res = await window.storage.get(`ciro:${store}:${ym}`, true);
+    if(!res) return {days:{}};
+    const parsed = JSON.parse(res.value);
+    return parsed && parsed.days ? parsed : {days:{}};
+  }catch(e){ return {days:{}}; }
+}
+async function addMonthToIndex(ym){
+  try{
+    let months=[];
+    try{ const r=await window.storage.get('meta:months',true); if(r) months=JSON.parse(r.value); }catch(e){}
+    if(!months.includes(ym)){ months.push(ym); months.sort(); await window.storage.set('meta:months', JSON.stringify(months), true); }
+  }catch(e){}
+}
+async function saveDay(store, dateStr, values){
+  const ym=ymOf(dateStr), day=dayOf(dateStr);
+  const rec = await getMonthRecord(store, ym);
+  rec.days[day] = {...values, updatedAt:new Date().toISOString()};
+  const ok = await window.storage.set(`ciro:${store}:${ym}`, JSON.stringify(rec), true);
+  if(!ok) throw new Error('save failed');
+  await addMonthToIndex(ym);
+}
+
+function yearOptions(centerYear){ const a=[]; for(let y=centerYear-3;y<=centerYear+1;y++) a.push(y); return a; }
+
+/* ================= ROOT RENDER ================= */
+const app = document.getElementById('app');
+
+function renderShell(innerHtml, headerExtra){
+  app.innerHTML = `
+    <header class="top">
+      <div class="header-bar">
+        <div>
+          <h1>Mağaza Ciro Takip</h1>
+          <p>Günlük ciro, müşteri ve aksiyon ürün verilerini mağazalar girer; yönetici konsolide görür.</p>
+          ${headerExtra||''}
+        </div>
+        ${session ? '<button class="logout-btn" onclick="logout()">Çıkış</button>' : ''}
+      </div>
+    </header>
+    ${innerHtml}
+  `;
+}
+function logout(){ session=null; renderLogin(); }
+
+/* ================= LOGIN ================= */
+function renderLogin(){
+  renderShell(`
+    <div class="login-wrap">
+      <div class="login-choice" onclick="renderStoreLoginForm()">
+        <div class="ico">🏬</div>
+        <div class="txt"><h3>Mağaza Girişi</h3><p>Günlük ciro ve ürün verilerinizi girin</p></div>
+      </div>
+      <div class="login-choice" onclick="renderAdminLoginForm()">
+        <div class="ico">🛡️</div>
+        <div class="txt"><h3>Yönetici Girişi</h3><p>Konsolide tabloları görüntüleyin, Excel indirin</p></div>
+      </div>
+    </div>
+  `);
+}
+
+function renderStoreLoginForm(){
+  renderShell(`
+    <button class="back-link" onclick="renderLogin()">← Geri</button>
+    <div class="card">
+      <h2><span class="dot"></span>Mağaza Girişi</h2>
+      <div class="field-row">
+        <div class="field">
+          <label>Mağaza</label>
+          <select id="sl-store">${STORES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Şifre</label>
+          <input type="password" id="sl-pass" placeholder="Mağaza şifresi" inputmode="numeric">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="attemptStoreLogin()">Giriş Yap</button>
+      <div class="status-msg" id="sl-status"></div>
+    </div>
+  `);
+  document.getElementById('sl-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') attemptStoreLogin(); });
+}
+function attemptStoreLogin(){
+  const store = document.getElementById('sl-store').value;
+  const pass = document.getElementById('sl-pass').value.trim();
+  const statusEl = document.getElementById('sl-status');
+  if(STORE_PASSWORDS[store] === pass){
+    session = {type:'store', store};
+    renderStoreDashboard();
+  }else{
+    statusEl.textContent = 'Şifre hatalı, tekrar deneyin.';
+    statusEl.className = 'status-msg status-err';
+  }
+}
+
+function renderAdminLoginForm(){
+  renderShell(`
+    <button class="back-link" onclick="renderLogin()">← Geri</button>
+    <div class="card">
+      <h2><span class="dot"></span>Yönetici Girişi</h2>
+      <div class="field-row">
+        <div class="field">
+          <label>Şifre</label>
+          <input type="password" id="al-pass" placeholder="Yönetici şifresi" inputmode="numeric">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="attemptAdminLogin()">Giriş Yap</button>
+      <div class="status-msg" id="al-status"></div>
+    </div>
+  `);
+  document.getElementById('al-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') attemptAdminLogin(); });
+}
+function attemptAdminLogin(){
+  const pass = document.getElementById('al-pass').value.trim();
+  const statusEl = document.getElementById('al-status');
+  if(pass === ADMIN_PASSWORD){
+    session = {type:'admin'};
+    renderAdminDashboard();
+  }else{
+    statusEl.textContent = 'Şifre hatalı, tekrar deneyin.';
+    statusEl.className = 'status-msg status-err';
+  }
+}
+
+/* ================= STORE DASHBOARD ================= */
+function renderStoreDashboard(){
+  const today = todayISO();
+  const badge = `<div class="who-badge">🏬 ${session.store}</div>`;
+  renderShell(`
+    <div class="card">
+      <h2><span class="dot"></span>Günlük Veri Girişi</h2>
+      <div class="field-row">
+        <div class="field">
+          <label>Tarih</label>
+          <input type="date" id="st-date" value="${today}" max="${today}">
+        </div>
+      </div>
+      <div class="field-row">
+        ${FIELD_DEFS.slice(0,2).map(f=>`
+          <div class="field"><label>${f.label}</label><input type="number" id="st-${f.key}" min="0" step="${f.kind==='money'?'0.01':'1'}"></div>
+        `).join('')}
+      </div>
+      <div class="field-row">
+        ${FIELD_DEFS.slice(2,4).map(f=>`
+          <div class="field"><label>${f.label}</label><input type="number" id="st-${f.key}" min="0" step="0.01"></div>
+        `).join('')}
+      </div>
+      <div class="field-row">
+        ${FIELD_DEFS.slice(4,6).map(f=>`
+          <div class="field"><label>${f.label}</label><input type="number" id="st-${f.key}" min="0" step="1"></div>
+        `).join('')}
+      </div>
+      <button class="btn btn-primary" id="st-save-btn">Kaydet</button>
+      <div class="status-msg" id="st-status"></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot"></span>Bu Ayki Girişleriniz</h2>
+      <div id="st-entries" class="loading">Yükleniyor…</div>
+    </div>
+  `, badge);
+
+  document.getElementById('st-date').addEventListener('change', renderStoreEntries);
+  document.getElementById('st-save-btn').addEventListener('click', onStoreSave);
+  renderStoreEntries();
+}
+
+async function onStoreSave(){
+  const date = document.getElementById('st-date').value;
+  const statusEl = document.getElementById('st-status');
+  const btn = document.getElementById('st-save-btn');
+  if(!date){ statusEl.textContent='Lütfen bir tarih seçin.'; statusEl.className='status-msg status-err'; return; }
+
+  const values = {};
+  for(const f of FIELD_DEFS){
+    const raw = document.getElementById(`st-${f.key}`).value;
+    if(raw===''){ values[f.key]=0; continue; }
+    const n = parseFloat(raw);
+    if(isNaN(n) || n<0){ statusEl.textContent=`${f.label} için geçerli bir değer girin.`; statusEl.className='status-msg status-err'; return; }
+    values[f.key]=n;
+  }
+  btn.disabled=true; btn.textContent='Kaydediliyor…';
+  try{
+    await saveDay(session.store, date, values);
+    statusEl.textContent = `${date} tarihli veriler kaydedildi.`;
+    statusEl.className='status-msg status-ok';
+    renderStoreEntries();
+  }catch(e){
+    statusEl.textContent='Kayıt sırasında bir sorun oluştu, tekrar deneyin.';
+    statusEl.className='status-msg status-err';
+  }finally{
+    btn.disabled=false; btn.textContent='Kaydet';
+  }
+}
+
+async function renderStoreEntries(){
+  const date = document.getElementById('st-date').value;
+  const wrap = document.getElementById('st-entries');
+  wrap.innerHTML = '<div class="loading">Yükleniyor…</div>';
+  if(!date) return;
+  const ym = ymOf(date);
+  const rec = await getMonthRecord(session.store, ym);
+  const days = Object.keys(rec.days).sort((a,b)=>b.localeCompare(a));
+
+  if(days.length===0){
+    wrap.innerHTML = '<div class="loading">Bu ay için henüz giriş yok.</div>';
+  }else{
+    const rows = days.map(d=>{
+      const v = rec.days[d];
+      const full = `${ym}-${d}`;
+      return `<tr>
+        <td class="store-cell">${full}</td>
+        <td class="num">${fmt(v.ciro)} ₺</td>
+        <td class="num">${fmt(v.musteri)}</td>
+        <td class="num">${fmt(v.madenSuyu)}</td>
+        <td class="num">${fmt(v.gofret)}</td>
+        <td class="num"><button class="edit-link" onclick="loadDayIntoForm('${full}')">Düzenle</button></td>
+      </tr>`;
+    }).join('');
+    wrap.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Tarih</th><th>Ciro</th><th>Müşteri</th><th>Maden Suyu</th><th>Gofret</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  }
+
+  // prefill form if this exact date has data
+  const day = dayOf(date);
+  const existing = rec.days[day];
+  FIELD_DEFS.forEach(f=>{ document.getElementById(`st-${f.key}`).value = existing ? existing[f.key] : ''; });
+}
+async function loadDayIntoForm(dateStr){
+  document.getElementById('st-date').value = dateStr;
+  await renderStoreEntries();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ================= ADMIN DASHBOARD ================= */
+function renderAdminDashboard(){
+  const badge = `<div class="who-badge">🛡️ Yönetici</div>`;
+  renderShell(`
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="daily">Günlük Konsolide</button>
+      <button class="tab-btn" data-tab="monthly">Aylık Konsolide</button>
+      <button class="tab-btn" data-tab="yearly">Yıllık Özet</button>
+    </div>
+    <div id="tab-daily" class="tab-panel"></div>
+    <div id="tab-monthly" class="tab-panel" style="display:none;"></div>
+    <div id="tab-yearly" class="tab-panel" style="display:none;"></div>
+  `, badge);
+
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.tab-panel').forEach(p=>p.style.display='none');
+      document.getElementById('tab-'+btn.dataset.tab).style.display='block';
+      if(btn.dataset.tab==='yearly') initYearly();
+      if(btn.dataset.tab==='monthly') initMonthly();
+    });
+  });
+  initDaily();
+}
+
+/* ---- Günlük Konsolide ---- */
+let lastDailyData = null;
+function initDaily(){
+  const today = todayISO();
+  document.getElementById('tab-daily').innerHTML = `
+    <div class="card">
+      <div class="filter-row">
+        <div class="field"><label>Tarih</label>
+          <input type="date" id="d-date" value="${today}" max="${today}">
+        </div>
+      </div>
+    </div>
+    <div id="d-content"><div class="loading">Yükleniyor…</div></div>
+  `;
+  document.getElementById('d-date').addEventListener('change', loadDaily);
+  loadDaily();
+}
+
+async function loadDaily(){
+  const date = document.getElementById('d-date').value;
+  const content = document.getElementById('d-content');
+  content.innerHTML = '<div class="loading">Yükleniyor…</div>';
+  if(!date) return;
+  const ym = ymOf(date), day = dayOf(date);
+
+  const data = await Promise.all(STORES.map(async store=>{
+    const rec = await getMonthRecord(store, ym);
+    const v = rec.days[day];
+    return {
+      store, entered: !!v,
+      ciro: v?v.ciro:0, musteri: v?v.musteri:0,
+      ortCiro: v?v.ortCiro:0, ortMusteri: v?v.ortMusteri:0,
+      madenSuyu: v?v.madenSuyu:0, gofret: v?v.gofret:0
+    };
+  }));
+
+  const entered = data.filter(d=>d.entered);
+  const grand = {
+    totalCiro: data.reduce((a,d)=>a+d.ciro,0),
+    totalMusteri: data.reduce((a,d)=>a+d.musteri,0),
+    totalMaden: data.reduce((a,d)=>a+d.madenSuyu,0),
+    totalGofret: data.reduce((a,d)=>a+d.gofret,0),
+    enteredCount: entered.length
+  };
+  grand.alimGucu = grand.totalMusteri>0 ? grand.totalCiro/grand.totalMusteri : 0;
+
+  lastDailyData = {date, data, grand};
+
+  const rows = data.map(d=>`
+    <tr>
+      <td class="store-cell">${d.store}</td>
+      <td class="num">${d.entered ? fmt(d.ciro)+' ₺' : '<span class="empty-flag">Girilmedi</span>'}</td>
+      <td class="num">${d.entered ? fmt(d.musteri) : '–'}</td>
+      <td class="num">${d.entered ? fmt(d.ortCiro)+' ₺' : '–'}</td>
+      <td class="num">${d.entered ? fmt(d.ortMusteri) : '–'}</td>
+      <td class="num">${d.entered ? fmt(d.madenSuyu) : '–'}</td>
+      <td class="num">${d.entered ? fmt(d.gofret) : '–'}</td>
+    </tr>
+  `).join('');
+
+  content.innerHTML = `
+    <div class="summary-cards">
+      <div class="stat"><div class="k">Toplam Ciro</div><div class="v">${fmt(grand.totalCiro)} ₺</div></div>
+      <div class="stat"><div class="k">Toplam Müşteri</div><div class="v">${fmt(grand.totalMusteri)}</div></div>
+      <div class="stat"><div class="k">Alım Gücü</div><div class="v">${fmt(grand.alimGucu)} ₺</div></div>
+      <div class="stat"><div class="k">Giriş Yapan</div><div class="v">${grand.enteredCount}/${STORES.length}</div></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot"></span>${date} — Mağaza Kırılımı</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mağaza</th><th>Ciro</th><th>Müşteri</th><th>Ort. Ciro</th><th>Ort. Müşteri</th><th>Maden Suyu</th><th>Gofret</th></tr></thead>
+          <tbody>
+            ${rows}
+            <tr class="row-total">
+              <td>TOPLAM</td><td class="num">${fmt(grand.totalCiro)} ₺</td><td class="num">${fmt(grand.totalMusteri)}</td>
+              <td class="num">–</td><td class="num">–</td>
+              <td class="num">${fmt(grand.totalMaden)}</td><td class="num">${fmt(grand.totalGofret)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <button class="btn btn-amber" style="margin-top:12px;" onclick="exportDailyExcel()">📊 Excel Olarak İndir</button>
+    </div>
+  `;
+}
+
+function exportDailyExcel(){
+  if(!lastDailyData || typeof XLSX==='undefined'){ alert('Excel kütüphanesi yüklenemedi, internet bağlantınızı kontrol edin.'); return; }
+  const {date, data, grand} = lastDailyData;
+  const header = ['Mağaza','Ciro','Müşteri Sayısı','Ortalama Ciro','Ortalama Müşteri Sayısı','Maden Suyu','Gofret'];
+  const rows = data.map(d=>[d.store, d.ciro, d.musteri, d.ortCiro, d.ortMusteri, d.madenSuyu, d.gofret]);
+  rows.push(['TOPLAM', grand.totalCiro, grand.totalMusteri, '', '', grand.totalMaden, grand.totalGofret]);
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, date);
+  XLSX.writeFile(wb, `ciro-gunluk-${date}.xlsx`);
+}
+
+function initMonthly(){
+  const now = new Date();
+  const years = yearOptions(now.getFullYear());
+  document.getElementById('tab-monthly').innerHTML = `
+    <div class="card">
+      <div class="filter-row">
+        <div class="field"><label>Yıl</label>
+          <select id="m-year">${years.map(y=>`<option value="${y}" ${y===now.getFullYear()?'selected':''}>${y}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Ay</label>
+          <select id="m-month">${MONTH_NAMES.map((m,i)=>`<option value="${i+1}" ${i+1===now.getMonth()+1?'selected':''}>${m}</option>`).join('')}</select>
+        </div>
+      </div>
+    </div>
+    <div id="m-content"><div class="loading">Yükleniyor…</div></div>
+  `;
+  document.getElementById('m-year').addEventListener('change', loadMonthly);
+  document.getElementById('m-month').addEventListener('change', loadMonthly);
+  loadMonthly();
+}
+
+let lastMonthlyData = null;
+async function loadMonthly(){
+  const year = document.getElementById('m-year').value;
+  const monthNum = document.getElementById('m-month').value;
+  const ym = `${year}-${String(monthNum).padStart(2,'0')}`;
+  const pym = prevYm(year, monthNum);
+  const content = document.getElementById('m-content');
+  content.innerHTML = '<div class="loading">Yükleniyor…</div>';
+
+  const data = await Promise.all(STORES.map(async store=>{
+    const rec = await getMonthRecord(store, ym);
+    const prevRec = await getMonthRecord(store, pym);
+    const dayVals = Object.values(rec.days);
+    const prevVals = Object.values(prevRec.days);
+    const sum = key => dayVals.reduce((a,v)=>a+(v[key]||0),0);
+    const prevSum = key => prevVals.reduce((a,v)=>a+(v[key]||0),0);
+
+    const totalCiro = sum('ciro');
+    const totalMusteri = sum('musteri');
+    const totalMaden = sum('madenSuyu');
+    const totalGofret = sum('gofret');
+    const gunSayisi = dayVals.length;
+    const avgCiro = gunSayisi ? totalCiro/gunSayisi : 0;
+    const avgMusteri = gunSayisi ? totalMusteri/gunSayisi : 0;
+    const alimGucu = totalMusteri>0 ? totalCiro/totalMusteri : 0;
+
+    const prevTotalCiro = prevSum('ciro');
+    let gelisim = null;
+    if(prevTotalCiro>0) gelisim = ((totalCiro-prevTotalCiro)/prevTotalCiro)*100;
+    else if(totalCiro>0) gelisim = 100;
+
+    return {store, totalCiro, totalMusteri, totalMaden, totalGofret, gunSayisi, avgCiro, avgMusteri, alimGucu, gelisim};
+  }));
+
+  const grand = {
+    totalCiro: data.reduce((a,d)=>a+d.totalCiro,0),
+    totalMusteri: data.reduce((a,d)=>a+d.totalMusteri,0),
+    totalMaden: data.reduce((a,d)=>a+d.totalMaden,0),
+    totalGofret: data.reduce((a,d)=>a+d.totalGofret,0),
+    gunSayisiMax: Math.max(0,...data.map(d=>d.gunSayisi))
+  };
+  grand.avgCiro = grand.gunSayisiMax ? grand.totalCiro/grand.gunSayisiMax : 0;
+  grand.avgMusteri = grand.gunSayisiMax ? grand.totalMusteri/grand.gunSayisiMax : 0;
+  grand.alimGucu = grand.totalMusteri>0 ? grand.totalCiro/grand.totalMusteri : 0;
+
+  const prevData = await Promise.all(STORES.map(async store=>{
+    const prevRec = await getMonthRecord(store, pym);
+    return Object.values(prevRec.days).reduce((a,v)=>a+(v.ciro||0),0);
+  }));
+  const prevGrandCiro = prevData.reduce((a,b)=>a+b,0);
+  grand.gelisim = prevGrandCiro>0 ? ((grand.totalCiro-prevGrandCiro)/prevGrandCiro)*100 : (grand.totalCiro>0?100:null);
+
+  lastMonthlyData = {year, monthNum, data: [...data].sort((a,b)=>b.totalCiro-a.totalCiro), grand};
+
+  function growthHtml(g){
+    if(g===null) return '<span class="grow-flat">–</span>';
+    const cls = g>0.05?'grow-up':(g<-0.05?'grow-down':'grow-flat');
+    const arrow = g>0.05?'▲':(g<-0.05?'▼':'—');
+    return `<span class="${cls}">${arrow} %${fmt(Math.abs(g))}</span>`;
+  }
+
+  const rows = lastMonthlyData.data.map(d=>`
+    <tr>
+      <td class="store-cell">${d.store}</td>
+      <td class="num">${fmt(d.totalCiro)} ₺</td>
+      <td class="num">${fmt(d.totalMusteri)}</td>
+      <td class="num">${fmt(d.avgCiro)} ₺</td>
+      <td class="num">${fmt(d.avgMusteri)}</td>
+      <td class="num">${fmt(d.alimGucu)} ₺</td>
+      <td class="num">${growthHtml(d.gelisim)}</td>
+      <td class="num">${fmt(d.totalMaden)}</td>
+      <td class="num">${fmt(d.totalGofret)}</td>
+    </tr>
+  `).join('');
+
+  content.innerHTML = `
+    <div class="summary-cards">
+      <div class="stat"><div class="k">Toplam Ciro</div><div class="v">${fmt(grand.totalCiro)} ₺</div></div>
+      <div class="stat"><div class="k">Kümülatif Ort. Ciro</div><div class="v">${fmt(grand.avgCiro)} ₺</div></div>
+      <div class="stat"><div class="k">Toplam Müşteri</div><div class="v">${fmt(grand.totalMusteri)}</div></div>
+      <div class="stat"><div class="k">Alım Gücü</div><div class="v">${fmt(grand.alimGucu)} ₺</div></div>
+      <div class="stat"><div class="k">Gelişim</div><div class="v">${growthHtml(grand.gelisim)}</div></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot"></span>${MONTH_NAMES[monthNum-1]} ${year} — Mağaza Kırılımı</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mağaza</th><th>Toplam Ciro</th><th>Toplam Müşteri</th><th>Ort. Günlük Ciro</th><th>Ort. Günlük Müşteri</th><th>Alım Gücü</th><th>Gelişim</th><th>Maden Suyu</th><th>Gofret</th></tr></thead>
+          <tbody>
+            ${rows}
+            <tr class="row-total">
+              <td>TOPLAM</td><td class="num">${fmt(grand.totalCiro)} ₺</td><td class="num">${fmt(grand.totalMusteri)}</td>
+              <td class="num">${fmt(grand.avgCiro)} ₺</td><td class="num">${fmt(grand.avgMusteri)}</td>
+              <td class="num">${fmt(grand.alimGucu)} ₺</td><td class="num">${growthHtml(grand.gelisim)}</td>
+              <td class="num">${fmt(grand.totalMaden)}</td><td class="num">${fmt(grand.totalGofret)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <button class="btn btn-amber" style="margin-top:12px;" onclick="exportMonthlyExcel()">📊 Excel Olarak İndir</button>
+    </div>
+  `;
+}
+
+function exportMonthlyExcel(){
+  if(!lastMonthlyData || typeof XLSX==='undefined'){ alert('Excel kütüphanesi yüklenemedi, internet bağlantınızı kontrol edin.'); return; }
+  const {year, monthNum, data, grand} = lastMonthlyData;
+  const header = ['Mağaza','Toplam Ciro','Toplam Müşteri','Ort. Günlük Ciro','Ort. Günlük Müşteri','Alım Gücü','Gelişim (%)','Maden Suyu','Gofret'];
+  const rows = data.map(d=>[d.store, d.totalCiro, d.totalMusteri, Math.round(d.avgCiro*100)/100, Math.round(d.avgMusteri*100)/100, Math.round(d.alimGucu*100)/100, d.gelisim===null?'':Math.round(d.gelisim*100)/100, d.totalMaden, d.totalGofret]);
+  rows.push(['TOPLAM', grand.totalCiro, grand.totalMusteri, Math.round(grand.avgCiro*100)/100, Math.round(grand.avgMusteri*100)/100, Math.round(grand.alimGucu*100)/100, grand.gelisim===null?'':Math.round(grand.gelisim*100)/100, grand.totalMaden, grand.totalGofret]);
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `${MONTH_NAMES[monthNum-1]} ${year}`.slice(0,31));
+  XLSX.writeFile(wb, `ciro-konsolide-${year}-${String(monthNum).padStart(2,'0')}.xlsx`);
+}
+
+let lastYearlyData = null;
+function initYearly(){
+  const now = new Date();
+  const years = yearOptions(now.getFullYear());
+  const el = document.getElementById('tab-yearly');
+  el.innerHTML = `
+    <div class="card">
+      <div class="filter-row">
+        <div class="field"><label>Yıl</label>
+          <select id="y-year">${years.map(y=>`<option value="${y}" ${y===now.getFullYear()?'selected':''}>${y}</option>`).join('')}</select>
+        </div>
+      </div>
+    </div>
+    <div id="y-content"><div class="loading">Yükleniyor…</div></div>
+  `;
+  document.getElementById('y-year').addEventListener('change', loadYearly);
+  loadYearly();
+}
+
+async function loadYearly(){
+  const year = document.getElementById('y-year').value;
+  const content = document.getElementById('y-content');
+  content.innerHTML = '<div class="loading">Yükleniyor…</div>';
+
+  const storeMonthTotals = {};
+  await Promise.all(STORES.map(async store=>{
+    storeMonthTotals[store] = new Array(12).fill(0);
+    await Promise.all(MONTH_NAMES.map(async (_, idx)=>{
+      const ym = `${year}-${String(idx+1).padStart(2,'0')}`;
+      const rec = await getMonthRecord(store, ym);
+      storeMonthTotals[store][idx] = Object.values(rec.days).reduce((a,v)=>a+(v.ciro||0),0);
+    }));
+  }));
+
+  const monthTotals = new Array(12).fill(0);
+  let grandTotal = 0;
+  STORES.forEach(store=>{ storeMonthTotals[store].forEach((v,idx)=>{ monthTotals[idx]+=v; grandTotal+=v; }); });
+
+  lastYearlyData = {year, storeMonthTotals, monthTotals, grandTotal};
+
+  const headerCells = MONTH_NAMES.map(m=>`<th>${m.slice(0,3)}</th>`).join('');
+  const bodyRows = STORES.map(store=>{
+    const rowTotal = storeMonthTotals[store].reduce((a,b)=>a+b,0);
+    const cells = storeMonthTotals[store].map(v=>`<td class="num">${v>0?fmt(v):'<span class="empty-flag">–</span>'}</td>`).join('');
+    return `<tr><td class="matrix-store store-cell">${store}</td>${cells}<td class="num matrix-total">${fmt(rowTotal)}</td></tr>`;
+  }).join('');
+  const totalCells = monthTotals.map(v=>`<td class="num matrix-total">${fmt(v)}</td>`).join('');
+
+  content.innerHTML = `
+    <div class="summary-cards">
+      <div class="stat"><div class="k">${year} Toplam Ciro</div><div class="v">${fmt(grandTotal)} ₺</div></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot"></span>${year} — Mağaza × Ay Matrisi (Ciro ₺)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th class="matrix-store">Mağaza</th>${headerCells}<th>Toplam</th></tr></thead>
+          <tbody>${bodyRows}<tr class="row-total"><td class="matrix-store">TOPLAM</td>${totalCells}<td class="matrix-total">${fmt(grandTotal)}</td></tr></tbody>
+        </table>
+      </div>
+      <button class="btn btn-amber" style="margin-top:12px;" onclick="exportYearlyExcel()">📊 Excel Olarak İndir</button>
+    </div>
+  `;
+}
+
+function exportYearlyExcel(){
+  if(!lastYearlyData || typeof XLSX==='undefined'){ alert('Excel kütüphanesi yüklenemedi, internet bağlantınızı kontrol edin.'); return; }
+  const {year, storeMonthTotals, monthTotals, grandTotal} = lastYearlyData;
+  const header = ['Mağaza', ...MONTH_NAMES, 'Toplam'];
+  const rows = STORES.map(store=>{
+    const total = storeMonthTotals[store].reduce((a,b)=>a+b,0);
+    return [store, ...storeMonthTotals[store].map(v=>Math.round(v*100)/100), Math.round(total*100)/100];
+  });
+  rows.push(['TOPLAM', ...monthTotals.map(v=>Math.round(v*100)/100), Math.round(grandTotal*100)/100]);
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `Yıllık ${year}`);
+  XLSX.writeFile(wb, `ciro-yillik-${year}.xlsx`);
+}
+
+/* ================= INIT ================= */
+renderLogin();
+</script>
+</body>
+</html>
