@@ -99,13 +99,22 @@ const STORE_PASSWORDS = {
   "Hacıhasan":"1563"
 };
 const STORES = Object.keys(STORE_PASSWORDS);
+const STORE_SLUGS = {
+  "Köprübaşı":"koprubasi",
+  "Cihangir":"cihangir",
+  "Kalenderhane":"kalenderhane",
+  "Kahraman":"kahraman",
+  "Musalla":"musalla",
+  "Şemş":"sems",
+  "Nakipoğlu":"nakipoglu",
+  "Hacıhasan":"hacihasan"
+};
+function slug(store){ return STORE_SLUGS[store] || store; }
 const ADMIN_PASSWORD = "190542";
 const MONTH_NAMES = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 const FIELD_DEFS = [
   {key:'ciro', label:'Ciro (₺)', kind:'money'},
   {key:'musteri', label:'Müşteri Sayısı', kind:'int'},
-  {key:'ortCiro', label:'Ortalama Ciro (₺)', kind:'money'},
-  {key:'ortMusteri', label:'Ortalama Müşteri Sayısı', kind:'money'},
   {key:'madenSuyu', label:'Maden Suyu (adet)', kind:'int'},
   {key:'gofret', label:'Gofret (adet)', kind:'int'}
 ];
@@ -121,7 +130,7 @@ function prevYm(year, monthNum){ let y=+year, m=+monthNum-1; if(m<1){m=12;y--;} 
 
 async function getMonthRecord(store, ym){
   try{
-    const res = await window.storage.get(`ciro:${store}:${ym}`, true);
+    const res = await window.storage.get(`ciro:${slug(store)}:${ym}`, true);
     if(!res) return {days:{}};
     const parsed = JSON.parse(res.value);
     return parsed && parsed.days ? parsed : {days:{}};
@@ -138,9 +147,29 @@ async function saveDay(store, dateStr, values){
   const ym=ymOf(dateStr), day=dayOf(dateStr);
   const rec = await getMonthRecord(store, ym);
   rec.days[day] = {...values, updatedAt:new Date().toISOString()};
-  const ok = await window.storage.set(`ciro:${store}:${ym}`, JSON.stringify(rec), true);
+
+  // otomatik: bu güne kadarki (dahil) günlere göre kümülatif ortalama ciro/müşteri
+  const daysUpTo = Object.keys(rec.days).filter(d=>d<=day).sort();
+  const totalCiroUpTo = daysUpTo.reduce((a,d)=>a+(rec.days[d].ciro||0),0);
+  const totalMusteriUpTo = daysUpTo.reduce((a,d)=>a+(rec.days[d].musteri||0),0);
+  rec.days[day].ortCiro = daysUpTo.length ? totalCiroUpTo/daysUpTo.length : 0;
+  rec.days[day].ortMusteri = daysUpTo.length ? totalMusteriUpTo/daysUpTo.length : 0;
+
+  const ok = await window.storage.set(`ciro:${slug(store)}:${ym}`, JSON.stringify(rec), true);
   if(!ok) throw new Error('save failed');
   await addMonthToIndex(ym);
+}
+
+async function getLastYearRecord(store, ym){
+  try{
+    const res = await window.storage.get(`lastyear:${slug(store)}:${ym}`, true);
+    if(!res) return null;
+    return JSON.parse(res.value);
+  }catch(e){ return null; }
+}
+async function saveLastYear(store, ym, ciro, musteri){
+  const ok = await window.storage.set(`lastyear:${slug(store)}:${ym}`, JSON.stringify({ciro, musteri, updatedAt:new Date().toISOString()}), true);
+  if(!ok) throw new Error('save failed');
 }
 
 function yearOptions(centerYear){ const a=[]; for(let y=centerYear-3;y<=centerYear+1;y++) a.push(y); return a; }
@@ -266,16 +295,26 @@ function renderStoreDashboard(){
       </div>
       <div class="field-row">
         ${FIELD_DEFS.slice(2,4).map(f=>`
-          <div class="field"><label>${f.label}</label><input type="number" id="st-${f.key}" min="0" step="0.01"></div>
-        `).join('')}
-      </div>
-      <div class="field-row">
-        ${FIELD_DEFS.slice(4,6).map(f=>`
           <div class="field"><label>${f.label}</label><input type="number" id="st-${f.key}" min="0" step="1"></div>
         `).join('')}
       </div>
+      <div class="hint" style="margin:-4px 0 10px;">Ortalama ciro ve ortalama müşteri sayısı, girdiğiniz günlük verilere göre sistem tarafından otomatik hesaplanır.</div>
       <button class="btn btn-primary" id="st-save-btn">Kaydet</button>
       <div class="status-msg" id="st-status"></div>
+    </div>
+    <div class="card">
+      <h2><span class="dot"></span>Geçen Yıl Karşılaştırma Verisi</h2>
+      <div class="hint" style="margin-bottom:10px;">Her ayın 1'inde, seçtiğiniz ayın geçen yılki ciro ve müşteri sayısını girin — yönetici bu ayı geçen yılla kıyaslarken kullanır.</div>
+      <div class="field-row">
+        <div class="field"><label>Yıl</label><select id="ly-year">${yearOptions(new Date().getFullYear()).map(y=>`<option value="${y}" ${y===new Date().getFullYear()?'selected':''}>${y}</option>`).join('')}</select></div>
+        <div class="field"><label>Ay</label><select id="ly-month">${MONTH_NAMES.map((m,i)=>`<option value="${i+1}" ${i+1===new Date().getMonth()+1?'selected':''}>${m}</option>`).join('')}</select></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Geçen Yıl Ciro (₺)</label><input type="number" id="ly-ciro" min="0" step="0.01"></div>
+        <div class="field"><label>Geçen Yıl Müşteri Sayısı</label><input type="number" id="ly-musteri" min="0" step="1"></div>
+      </div>
+      <button class="btn btn-primary" id="ly-save-btn">Kaydet</button>
+      <div class="status-msg" id="ly-status"></div>
     </div>
     <div class="card">
       <h2><span class="dot"></span>Bu Ayki Girişleriniz</h2>
@@ -283,9 +322,52 @@ function renderStoreDashboard(){
     </div>
   `, badge);
 
-  document.getElementById('st-date').addEventListener('change', renderStoreEntries);
+  document.getElementById('st-date').addEventListener('change', onDateChange);
   document.getElementById('st-save-btn').addEventListener('click', onStoreSave);
-  renderStoreEntries();
+  document.getElementById('ly-year').addEventListener('change', loadLastYearForm);
+  document.getElementById('ly-month').addEventListener('change', loadLastYearForm);
+  document.getElementById('ly-save-btn').addEventListener('click', onSaveLastYear);
+  loadLastYearForm();
+  prefillForm(document.getElementById('st-date').value);
+  refreshHistory();
+}
+function onDateChange(){
+  const date = document.getElementById('st-date').value;
+  prefillForm(date);
+  refreshHistory();
+}
+
+async function loadLastYearForm(){
+  const year = document.getElementById('ly-year').value;
+  const month = document.getElementById('ly-month').value;
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  const rec = await getLastYearRecord(session.store, ym);
+  document.getElementById('ly-ciro').value = rec ? rec.ciro : '';
+  document.getElementById('ly-musteri').value = rec ? rec.musteri : '';
+}
+
+async function onSaveLastYear(){
+  const year = document.getElementById('ly-year').value;
+  const month = document.getElementById('ly-month').value;
+  const ym = `${year}-${String(month).padStart(2,'0')}`;
+  const ciroRaw = document.getElementById('ly-ciro').value;
+  const musteriRaw = document.getElementById('ly-musteri').value;
+  const statusEl = document.getElementById('ly-status');
+  const btn = document.getElementById('ly-save-btn');
+  const ciro = parseFloat(ciroRaw), musteri = parseFloat(musteriRaw);
+  if(ciroRaw===''||isNaN(ciro)||ciro<0||musteriRaw===''||isNaN(musteri)||musteri<0){
+    statusEl.textContent='Lütfen geçerli değerler girin.'; statusEl.className='status-msg status-err'; return;
+  }
+  btn.disabled=true; btn.textContent='Kaydediliyor…';
+  try{
+    await saveLastYear(session.store, ym, ciro, musteri);
+    statusEl.textContent = `${MONTH_NAMES[month-1]} ${year} için geçen yıl verisi kaydedildi.`;
+    statusEl.className='status-msg status-ok';
+  }catch(e){
+    statusEl.textContent='Kayıt sırasında bir sorun oluştu.'; statusEl.className='status-msg status-err';
+  }finally{
+    btn.disabled=false; btn.textContent='Kaydet';
+  }
 }
 
 async function onStoreSave(){
@@ -307,7 +389,7 @@ async function onStoreSave(){
     await saveDay(session.store, date, values);
     statusEl.textContent = `${date} tarihli veriler kaydedildi.`;
     statusEl.className='status-msg status-ok';
-    renderStoreEntries();
+    refreshHistory();
   }catch(e){
     statusEl.textContent='Kayıt sırasında bir sorun oluştu, tekrar deneyin.';
     statusEl.className='status-msg status-err';
@@ -316,7 +398,7 @@ async function onStoreSave(){
   }
 }
 
-async function renderStoreEntries(){
+async function refreshHistory(){
   const date = document.getElementById('st-date').value;
   const wrap = document.getElementById('st-entries');
   wrap.innerHTML = '<div class="loading">Yükleniyor…</div>';
@@ -335,25 +417,34 @@ async function renderStoreEntries(){
         <td class="store-cell">${full}</td>
         <td class="num">${fmt(v.ciro)} ₺</td>
         <td class="num">${fmt(v.musteri)}</td>
+        <td class="num">${fmt(v.ortCiro)} ₺</td>
+        <td class="num">${fmt(v.ortMusteri)}</td>
         <td class="num">${fmt(v.madenSuyu)}</td>
         <td class="num">${fmt(v.gofret)}</td>
         <td class="num"><button class="edit-link" onclick="loadDayIntoForm('${full}')">Düzenle</button></td>
       </tr>`;
     }).join('');
     wrap.innerHTML = `<div class="table-wrap"><table>
-      <thead><tr><th>Tarih</th><th>Ciro</th><th>Müşteri</th><th>Maden Suyu</th><th>Gofret</th><th></th></tr></thead>
+      <thead><tr><th>Tarih</th><th>Ciro</th><th>Müşteri</th><th>Ort. Ciro</th><th>Ort. Müşteri</th><th>Maden Suyu</th><th>Gofret</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
   }
+}
 
-  // prefill form if this exact date has data
-  const day = dayOf(date);
+async function prefillForm(date){
+  if(!date) return;
+  const ym = ymOf(date), day = dayOf(date);
+  const rec = await getMonthRecord(session.store, ym);
   const existing = rec.days[day];
-  FIELD_DEFS.forEach(f=>{ document.getElementById(`st-${f.key}`).value = existing ? existing[f.key] : ''; });
+  FIELD_DEFS.forEach(f=>{
+    const el = document.getElementById(`st-${f.key}`);
+    if(el) el.value = existing ? existing[f.key] : '';
+  });
 }
 async function loadDayIntoForm(dateStr){
   document.getElementById('st-date').value = dateStr;
-  await renderStoreEntries();
+  await prefillForm(dateStr);
+  await refreshHistory();
   window.scrollTo({top:0, behavior:'smooth'});
 }
 
@@ -516,6 +607,7 @@ async function loadMonthly(){
   const data = await Promise.all(STORES.map(async store=>{
     const rec = await getMonthRecord(store, ym);
     const prevRec = await getMonthRecord(store, pym);
+    const lastYearRec = await getLastYearRecord(store, ym);
     const dayVals = Object.values(rec.days);
     const prevVals = Object.values(prevRec.days);
     const sum = key => dayVals.reduce((a,v)=>a+(v[key]||0),0);
@@ -535,7 +627,13 @@ async function loadMonthly(){
     if(prevTotalCiro>0) gelisim = ((totalCiro-prevTotalCiro)/prevTotalCiro)*100;
     else if(totalCiro>0) gelisim = 100;
 
-    return {store, totalCiro, totalMusteri, totalMaden, totalGofret, gunSayisi, avgCiro, avgMusteri, alimGucu, gelisim};
+    const lastYearCiro = lastYearRec ? lastYearRec.ciro : null;
+    const lastYearMusteri = lastYearRec ? lastYearRec.musteri : null;
+    let yoyCiro = null, yoyMusteri = null;
+    if(lastYearCiro!==null){ yoyCiro = lastYearCiro>0 ? ((totalCiro-lastYearCiro)/lastYearCiro)*100 : (totalCiro>0?100:null); }
+    if(lastYearMusteri!==null){ yoyMusteri = lastYearMusteri>0 ? ((totalMusteri-lastYearMusteri)/lastYearMusteri)*100 : (totalMusteri>0?100:null); }
+
+    return {store, totalCiro, totalMusteri, totalMaden, totalGofret, gunSayisi, avgCiro, avgMusteri, alimGucu, gelisim, lastYearCiro, lastYearMusteri, yoyCiro, yoyMusteri};
   }));
 
   const grand = {
@@ -556,6 +654,12 @@ async function loadMonthly(){
   const prevGrandCiro = prevData.reduce((a,b)=>a+b,0);
   grand.gelisim = prevGrandCiro>0 ? ((grand.totalCiro-prevGrandCiro)/prevGrandCiro)*100 : (grand.totalCiro>0?100:null);
 
+  const grandLastYearCiro = data.reduce((a,d)=>a+(d.lastYearCiro||0),0);
+  const grandLastYearMusteri = data.reduce((a,d)=>a+(d.lastYearMusteri||0),0);
+  const hasLastYearData = data.some(d=>d.lastYearCiro!==null);
+  grand.yoyCiro = hasLastYearData ? (grandLastYearCiro>0 ? ((grand.totalCiro-grandLastYearCiro)/grandLastYearCiro)*100 : (grand.totalCiro>0?100:null)) : null;
+  grand.yoyMusteri = hasLastYearData ? (grandLastYearMusteri>0 ? ((grand.totalMusteri-grandLastYearMusteri)/grandLastYearMusteri)*100 : (grand.totalMusteri>0?100:null)) : null;
+
   lastMonthlyData = {year, monthNum, data: [...data].sort((a,b)=>b.totalCiro-a.totalCiro), grand};
 
   function growthHtml(g){
@@ -574,6 +678,8 @@ async function loadMonthly(){
       <td class="num">${fmt(d.avgMusteri)}</td>
       <td class="num">${fmt(d.alimGucu)} ₺</td>
       <td class="num">${growthHtml(d.gelisim)}</td>
+      <td class="num">${growthHtml(d.yoyCiro)}</td>
+      <td class="num">${growthHtml(d.yoyMusteri)}</td>
       <td class="num">${fmt(d.totalMaden)}</td>
       <td class="num">${fmt(d.totalGofret)}</td>
     </tr>
@@ -585,19 +691,22 @@ async function loadMonthly(){
       <div class="stat"><div class="k">Kümülatif Ort. Ciro</div><div class="v">${fmt(grand.avgCiro)} ₺</div></div>
       <div class="stat"><div class="k">Toplam Müşteri</div><div class="v">${fmt(grand.totalMusteri)}</div></div>
       <div class="stat"><div class="k">Alım Gücü</div><div class="v">${fmt(grand.alimGucu)} ₺</div></div>
-      <div class="stat"><div class="k">Gelişim</div><div class="v">${growthHtml(grand.gelisim)}</div></div>
+      <div class="stat"><div class="k">Gelişim (Önceki Ay)</div><div class="v">${growthHtml(grand.gelisim)}</div></div>
+      <div class="stat"><div class="k">Ciro Gelişimi (Geçen Yıl)</div><div class="v">${growthHtml(grand.yoyCiro)}</div></div>
+      <div class="stat"><div class="k">Müşteri Gelişimi (Geçen Yıl)</div><div class="v">${growthHtml(grand.yoyMusteri)}</div></div>
     </div>
     <div class="card">
       <h2><span class="dot"></span>${MONTH_NAMES[monthNum-1]} ${year} — Mağaza Kırılımı</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Mağaza</th><th>Toplam Ciro</th><th>Toplam Müşteri</th><th>Ort. Günlük Ciro</th><th>Ort. Günlük Müşteri</th><th>Alım Gücü</th><th>Gelişim</th><th>Maden Suyu</th><th>Gofret</th></tr></thead>
+          <thead><tr><th>Mağaza</th><th>Toplam Ciro</th><th>Toplam Müşteri</th><th>Ort. Günlük Ciro</th><th>Ort. Günlük Müşteri</th><th>Alım Gücü</th><th>Gelişim (Önceki Ay)</th><th>Ciro Gelişimi (Geçen Yıl)</th><th>Müşteri Gelişimi (Geçen Yıl)</th><th>Maden Suyu</th><th>Gofret</th></tr></thead>
           <tbody>
             ${rows}
             <tr class="row-total">
               <td>TOPLAM</td><td class="num">${fmt(grand.totalCiro)} ₺</td><td class="num">${fmt(grand.totalMusteri)}</td>
               <td class="num">${fmt(grand.avgCiro)} ₺</td><td class="num">${fmt(grand.avgMusteri)}</td>
               <td class="num">${fmt(grand.alimGucu)} ₺</td><td class="num">${growthHtml(grand.gelisim)}</td>
+              <td class="num">${growthHtml(grand.yoyCiro)}</td><td class="num">${growthHtml(grand.yoyMusteri)}</td>
               <td class="num">${fmt(grand.totalMaden)}</td><td class="num">${fmt(grand.totalGofret)}</td>
             </tr>
           </tbody>
@@ -611,9 +720,21 @@ async function loadMonthly(){
 function exportMonthlyExcel(){
   if(!lastMonthlyData || typeof XLSX==='undefined'){ alert('Excel kütüphanesi yüklenemedi, internet bağlantınızı kontrol edin.'); return; }
   const {year, monthNum, data, grand} = lastMonthlyData;
-  const header = ['Mağaza','Toplam Ciro','Toplam Müşteri','Ort. Günlük Ciro','Ort. Günlük Müşteri','Alım Gücü','Gelişim (%)','Maden Suyu','Gofret'];
-  const rows = data.map(d=>[d.store, d.totalCiro, d.totalMusteri, Math.round(d.avgCiro*100)/100, Math.round(d.avgMusteri*100)/100, Math.round(d.alimGucu*100)/100, d.gelisim===null?'':Math.round(d.gelisim*100)/100, d.totalMaden, d.totalGofret]);
-  rows.push(['TOPLAM', grand.totalCiro, grand.totalMusteri, Math.round(grand.avgCiro*100)/100, Math.round(grand.avgMusteri*100)/100, Math.round(grand.alimGucu*100)/100, grand.gelisim===null?'':Math.round(grand.gelisim*100)/100, grand.totalMaden, grand.totalGofret]);
+  const header = ['Mağaza','Toplam Ciro','Toplam Müşteri','Ort. Günlük Ciro','Ort. Günlük Müşteri','Alım Gücü','Gelişim Önceki Ay (%)','Geçen Yıl Ciro','Geçen Yıl Müşteri','Ciro Gelişimi Geçen Yıl (%)','Müşteri Gelişimi Geçen Yıl (%)','Maden Suyu','Gofret'];
+  const rows = data.map(d=>[
+    d.store, d.totalCiro, d.totalMusteri, Math.round(d.avgCiro*100)/100, Math.round(d.avgMusteri*100)/100, Math.round(d.alimGucu*100)/100,
+    d.gelisim===null?'':Math.round(d.gelisim*100)/100,
+    d.lastYearCiro===null?'':d.lastYearCiro, d.lastYearMusteri===null?'':d.lastYearMusteri,
+    d.yoyCiro===null?'':Math.round(d.yoyCiro*100)/100, d.yoyMusteri===null?'':Math.round(d.yoyMusteri*100)/100,
+    d.totalMaden, d.totalGofret
+  ]);
+  rows.push([
+    'TOPLAM', grand.totalCiro, grand.totalMusteri, Math.round(grand.avgCiro*100)/100, Math.round(grand.avgMusteri*100)/100, Math.round(grand.alimGucu*100)/100,
+    grand.gelisim===null?'':Math.round(grand.gelisim*100)/100,
+    '', '',
+    grand.yoyCiro===null?'':Math.round(grand.yoyCiro*100)/100, grand.yoyMusteri===null?'':Math.round(grand.yoyMusteri*100)/100,
+    grand.totalMaden, grand.totalGofret
+  ]);
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, `${MONTH_NAMES[monthNum-1]} ${year}`.slice(0,31));
